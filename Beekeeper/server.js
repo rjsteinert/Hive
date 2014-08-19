@@ -2,7 +2,6 @@ var Settings = require('../Settings')
 var log = require('../util/log.js')
 var express = require('express')
 var tellCouchDbAboutDrives = require('./lib/TellCouchDbAboutDrives.js')
-var processRecipes = require('./lib/ProcessRecipes.js')
 var harvestHoneyJars = require('./lib/HarvestHoneyJars.js')
 
 
@@ -10,13 +9,43 @@ var harvestHoneyJars = require('./lib/HarvestHoneyJars.js')
  * Beekeeper UI on port 8800
  */
 
-var ui = express()
-ui.get(/^(.+)$/, function(req, res) { 
-  res.sendfile(Settings.Beekeeper.path + '/attachments/' + req.params[0]) 
-})
-ui.listen(8800)
-log('Beekeeper', 'UI listening on port 8800')
+var ui = express();
 
+/*
+ * Download CSV
+ */
+
+ui.get('/download', function(req, res){
+
+  beeId = req.query.beeId;
+
+  if(!!beeId){
+    var python = require('child_process').spawn(
+    'python',
+    [Settings.path + "/Beekeeper/lib/export_csv.py", beeId]
+    );
+
+    res.setHeader('Content-disposition', 'attachment; filename=bee_' + beeId + '.csv');
+
+    python.stdout.on('data', function(data){
+      res.write(data);
+    });
+
+    python.on('close', function(code){
+     if (code !== 0) {  return res.send(500, code); }
+     return res.end();
+    });
+  } else { res.send(500, 'No file found'); }
+});
+
+ui.get(/^(.+)$/, function(req, res) {
+  var filePath = Settings.Beekeeper.path + '/attachments/' + req.params[0];
+  res.sendfile(filePath);
+});
+
+ui.use(express.timeout(30 * 60 * 1000)); // 30 min timeout for downloads
+ui.listen(8800);
+log('Beekeeper', 'UI listening on port 8800');
 
 /*
  * Set up some processes, staggered
@@ -36,20 +65,6 @@ setTimeout(function() {
     }, Settings.tellCouchDbAboutDrivesFrequencyInMinutes*60*1000)
   })
 }, 1000*5*1)
-
-setTimeout(function() {
-  log("ProcessRecipes", "starting")
-  processRecipes(function(err, message) { 
-    if (err) log('ProcessRecipes', err)
-    if (message) log('ProcessRecipes', message)
-    setInterval(function() {
-      processRecipes(function(err, message) { 
-        if(err) log('ProcessRecipes', err)
-        if(message) log('ProcessRecipes', message)
-      })
-    }, Settings.processRecipesFrequencyInMinutes*60*1000)
-  })
-}, 1000*10*2)
 
 setTimeout(function() {
   log("HarvestHoneyJars", "starting")

@@ -8,6 +8,16 @@ $(function() {
     // couch database to use in url generating
     db: 'config',
 
+    save: function (key, val, options) {
+     this.beforeSave(key, val, options);
+     return Backbone.Model.prototype.save.call(this, key, val, options);
+    },
+
+    beforeSave: function (key, val, options) {
+      var timestamp = Math.round(new Date().getTime() / 1000);
+      this.set({updatedAt: timestamp});
+    },
+
     // An override for compatibility with CouchDB
     url: function() {
       var url
@@ -15,7 +25,7 @@ $(function() {
         url = '/config/' + this.id + "?rev=" + this.get('_rev')
       }
       else if (_.has(this, 'id') ) {
-        url = '/config/' + this.id 
+        url = '/config/' + this.id
       }
       else {
         url = '/config'
@@ -24,9 +34,11 @@ $(function() {
     },
 
     schema: {
-      'name': 'Text',
-      'address': 'Text'
-    }    
+      name: 'Text',
+      address: { type: 'Text', editorAttrs: { disabled: true } },
+      wundergroundId: 'Text',
+      wundergroundPassword: 'Password'
+    }
 
   })
 

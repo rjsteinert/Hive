@@ -62,7 +62,7 @@ module.exports = {
       switch (method) {
         case 'read':
           db.list({"startkey": collection.params.startkey, "endkey": collection.params.endkey, include_docs:true}, function(err, body) {
-            if(body.hasOwnProperty('rows') && body.rows.length > 0) {
+            if(body && body.hasOwnProperty('rows') && body.rows.length > 0) {
               body.rows.forEach(function(row) {
                 collection.add(row.doc)
               })
@@ -104,9 +104,11 @@ module.exports = {
         case 'read':
           //console.log(this.params)
           db.view('api', 'UnhatchedEggsByBeeAddress',{"keys":[this.params.beeAddress], include_docs:true}, function(err, body) {
-            if(body.hasOwnProperty('rows')) {
+            if(body && body.hasOwnProperty('rows')) {
               body.rows.forEach(function(row) {
-                collection.add(row.doc)
+                if(row.doc.hatched === false) {
+                  collection.add(row.doc);
+                }
               })
             }
             collection.trigger('sync')
@@ -137,6 +139,25 @@ module.exports = {
     }
   }),
 
+  Bees: Backbone.Collection.extend({
+    model: HiveBackbone.Models.Bee,
+    params: {},
+    sync: function (method, collection, options) {
+      var db = nano.use('config');
+      switch (method) {
+        case 'read':
+          db.view('api', 'Bees',{"include_docs": true}, function(err, body) {
+            collection.models = [];
+            _.each(body.rows, function(row) {
+              collection.add(row.doc);
+            });
+            collection.trigger('sync');
+          });
+          break;
+      }
+    }
+  }),
+
   BeesByAddress: Backbone.Collection.extend({
     model: HiveBackbone.Models.Bee,
     params: {
@@ -159,6 +180,7 @@ module.exports = {
 
   SensorsByBeeId: Backbone.Collection.extend({
     model: HiveBackbone.Models.Sensor,
+    comparator: 'order',
     params: {
       beeId: null
     },
@@ -182,16 +204,17 @@ module.exports = {
     }
   }),
 
-  SensorDefinitionsByFirmwareUUID: Backbone.Collection.extend({
+  SensorDefinitionsByFirmwareUUIDInteger: Backbone.Collection.extend({
+    // FIXME
     model: HiveBackbone.Models.Sensor,
     params: {
-      sensorDefinitionFirmwareUUIDs: []
+      sensorDefinitionFirmwareUUIDIntegers: []
     },
     sync: function (method, collection, options) {
       var db = nano.use('config')
       switch (method) {
         case 'read':
-          db.view('api', 'SensorDefinitionsByFirmwareUUIDs',{"include_docs": true, "keys":this.params.sensorDefinitionFirmwareUUIDs}, function(err, body) {
+          db.view('api', 'SensorDefinitionsByFirmwareUUIDInteger',{"include_docs": true, "keys":this.params.sensorDefinitionFirmwareUUIDIntegers}, function(err, body) {
             collection.models = []
             _.each(body.rows, function(row) {
               collection.add(row.doc)
@@ -204,6 +227,7 @@ module.exports = {
   }),
 
   SensorDefinitions: Backbone.Collection.extend({
+    // FIXME
     model: HiveBackbone.Models.Sensor,
     params: {
     },
@@ -218,6 +242,25 @@ module.exports = {
             })
             collection.trigger('sync')
           })
+          break;
+      }
+    }
+  }),
+
+  Recipes: Backbone.Collection.extend({
+    model: HiveBackbone.Models.Recipe,
+    params: {},
+    sync: function (method, collection, options) {
+      var db = nano.use('config');
+      switch (method) {
+        case 'read':
+          db.view('api', 'Recipes', {"include_docs": true}, function(err, body) {
+            collection.models = [];
+            _.each(body.rows, function(row) {
+              collection.add(row.doc);
+            });
+            collection.trigger('sync');
+          });
           break;
       }
     }

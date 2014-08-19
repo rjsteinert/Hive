@@ -6,18 +6,18 @@ var HiveBackbone = require('../HiveBackbone/HiveBackbone')
 var Settings = require('../Settings')
 var queenClient = request.newClient(Settings.Queen.URL)
 var server = express();
+var _ = require('underscore');
 
 server.use(express.bodyParser())
- 
+
 
 server.post('/egg/new', function(req, res){
   var egg = new HiveBackbone.Models.Egg(req.body)
   egg.on('sync', function() {
     queenClient.post(
-      'http://127.0.0.1:125/egg/hatch', 
+      'http://127.0.0.1:125/egg/hatch',
       {
-        "beeAddress": egg.get('address'), 
-        "name": "New Bee #" + (new Date()).getTime()
+        "beeAddress": egg.get('address')
       },
       function(err, response, body) {
         if(!err) {
@@ -36,45 +36,106 @@ server.post('/egg/new', function(req, res){
 
 server.post('/egg/hatch', function(req, res){
 
-  var ev = new Backbone.Model()
-  var beeAddress = req.body.beeAddress
-  var egg = new HiveBackbone.Models.Egg()
-  var bee = new HiveBackbone.Models.Bee({address: beeAddress, name: req.body.name})
-  var sensors = new HiveBackbone.Collections.Sensors() 
+  var ev = new Backbone.Model(),
+      beeAddress = req.body.beeAddress,
+      bee = new HiveBackbone.Models.Bee(),
+      bees = new HiveBackbone.Collections.BeesByAddress(),
+      allBees = new HiveBackbone.Collections.Bees(),
+      egg = new HiveBackbone.Models.Egg(),
+      sensors = new HiveBackbone.Collections.Sensors(),
+      sensorDefinitions = new HiveBackbone.Collections.SensorDefinitions(),
+      unhatchedEggsByBeeAddress = new HiveBackbone.Collections.UnhatchedEggsByBeeAddress(),
+      beeCount = 1;
 
   // Find the unhatched Egg by beeAddress
   ev.on('0', function() {
-    var unhatchedEggsByBeeAddress = new HiveBackbone.Collections.UnhatchedEggsByBeeAddress()
-    unhatchedEggsByBeeAddress.params.beeAddress = beeAddress
+    unhatchedEggsByBeeAddress.params.beeAddress = beeAddress;
     unhatchedEggsByBeeAddress.once('sync', function() {
-      egg = unhatchedEggsByBeeAddress.models[0]
-      ev.trigger('1')
-    })
-    unhatchedEggsByBeeAddress.fetch()
-  })
+      egg = unhatchedEggsByBeeAddress.models[0];
+      if(!!egg) ev.trigger('1a');
+    });
+    unhatchedEggsByBeeAddress.fetch();
+  });
+
+  // Get total bees
+  ev.on('1a', function() {
+    allBees.once('sync', function() {
+      beeCount = allBees.length + 1;
+      ev.trigger('1b');
+    });
+
+    allBees.fetch();
+  });
 
   // Create the Bee in the config database
-  ev.on('1', function() {
-    bee.once('sync', function() {
-      ev.trigger('2')
-    })
-    bee.save()
-  })
+  ev.on('1b', function() {
+    bees.params.beeAddress = beeAddress;
+
+    bees.once('sync', function() {
+      bee = bees.models[0];
+      if(!!bee) {
+        ev.trigger('2');
+      } else {
+        bee = new HiveBackbone.Models.Bee({
+          address: beeAddress,
+          name: "New Bee #" + beeCount
+        });
+        bee.on('sync', function() {
+          ev.trigger('2');
+        });
+        bee.save();
+      }
+    });
+
+    bees.fetch();
+  });
+
+  // Get Sensor Definitions
+  ev.on('2', function() {
+    sensorDefinitions.on('sync', function(){
+      sensorDefinitions = _.object(_.map(sensorDefinitions.models, function(sensorDefinition){
+          var sensorDefinitionVersion = sensorDefinition.get('firmwareUUID'),
+              sensorName = sensorDefinition.get('name');
+          sensorDefinitionVersion = parseInt(sensorDefinitionVersion, 16);
+          return [sensorDefinitionVersion, sensorName];
+        }
+      ));
+      ev.trigger('2b');
+    });
+
+    sensorDefinitions.fetch();
+  });
 
   // Produce Sensor docs from Egg
-  ev.on('2', function() {
-    var i = 0
-    egg.attributes.sensors.forEach(function(sensor) {
-      var sensor = new HiveBackbone.Models.Sensor({
-        "order": i,
-        "beeId": bee.id,
-        "sensorDefinitionFirmwareUUID": sensor 
-      })
-      sensors.add(sensor)
-      i++
-    })
-    ev.trigger('3') 
-  })
+  ev.on('2b', function() {
+    var existingSensors = new HiveBackbone.Collections.SensorsByBeeId(),
+      eggSensorUUIDs = egg.get('sensors');
+
+    existingSensors.params.beeId = bee.id;
+
+    existingSensors.on('sync', function(){
+      eggSensorUUIDs.forEach(function(sensorUUID, i) {
+        var sensorVersion = parseInt(sensorUUID, 16),
+            sensor = new HiveBackbone.Models.Sensor({
+              "order": i,
+              "beeId": bee.id,
+              "name": sensorDefinitions[sensorVersion],
+              "sensorDefinitionFirmwareUUID": sensorUUID
+            }),
+            existingSensor = _.filter(existingSensors.models, function(sensor){
+                return sensor.get('sensorDefinitionFirmwareUUID') == sensorUUID && sensor.get('order') == i;
+              }
+            ),
+            shouldAddSensor = !existingSensor.length;
+
+        if(shouldAddSensor) sensors.add(sensor);
+      });
+
+      ev.trigger('3');
+    });
+
+    existingSensors.fetch();
+  });
 
   // Create the Sensors in the config database
   ev.on('3', function() {

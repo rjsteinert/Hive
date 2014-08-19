@@ -1,13 +1,13 @@
 [Unit]
-Description=Hive Updater Launcher
+Description=XbeePython Launcher
 After=couchdb.service openntpd.service systemd-remount-fs.service
-Requires=couchdb.service
+Requires=hive-honeycomb.service
 
 [Service]
 Type=simple
 Restart=always
 RestartSec=10s
-ExecStart=/usr/bin/node /root/.Hive-Updater/server.js
+ExecStart=/usr/bin/python /root/Hive/XbeePython/worker.py
 
 [Install]
 WantedBy=multi-user.target
