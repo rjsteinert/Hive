@@ -46,6 +46,7 @@ ui.get(/^(.+)$/, function(req, res) {
 ui.use(express.timeout(30 * 60 * 1000)); // 30 min timeout for downloads
 ui.listen(8800);
 log('Beekeeper', 'UI listening on port 8800');
+console.log('forever::ready')
 
 /*
  * Set up some processes, staggered

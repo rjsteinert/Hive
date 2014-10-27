@@ -148,3 +148,4 @@ server.post('/*', function(req, res){
 
 server.listen(126);
 log('Honeycomb', 'server listening on port 126')
+console.log('forever::ready')

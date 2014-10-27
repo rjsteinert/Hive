@@ -164,3 +164,4 @@ server.post('/egg/hatch', function(req, res){
 
 server.listen(125)
 log('Queen', 'server listening on port 125')
+console.log('forever::ready')

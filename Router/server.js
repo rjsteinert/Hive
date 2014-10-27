@@ -19,4 +19,5 @@ var options = {
 
 httpProxy.createServer(options).listen(8000)
 log('Hive Router', 'httpProxy listening at port 8000')
+console.log('forever::ready')
 
